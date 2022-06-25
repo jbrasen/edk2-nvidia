@@ -19,6 +19,9 @@ on:
     branches: [ "rel-34-updates" ]
   schedule:
     - cron: '45 1 * * 4'
+env:
+  EDKREPO_URL: https://github.com/tianocore/edk2-edkrepo/releases/download/edkrepo-v2.1.2/edkrepo-2.1.2.tar.gz
+  EDKREPO_NVIDIA_MANIFEST_REPO: https://github.com/NVIDIA/edk2-edkrepo-manifest.git
 
 jobs:
   analyze:
@@ -37,8 +40,44 @@ jobs:
         # Learn more about CodeQL language support at https://aka.ms/codeql-docs/language-support
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Install packages
+        run: |
+          # Add mono's PPA
+          # - https://github.com/tianocore/edk2-pytool-extensions/blob/master/docs/usability/using_extdep.md#a-note-on-nuget-on-linux
+          sudo apt install -y gnupg ca-certificates
+          sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF
+          echo "deb https://download.mono-project.com/repo/ubuntu stable-bionic main" | sudo tee /etc/apt/sources.list.d/mono-official-stable.list
+          sudo apt update
+          # Install required packages
+          sudo apt install -y build-essential uuid-dev git gcc python3 virtualenv gcc-aarch64-linux-gnu device-tree-compiler mono-devel
+          # Make sure everything is up-to-date
+          sudo apt upgrade
+      - name: Install edkrepo
+        run: |
+          mkdir ${{ github.workspace }}/edkrepo
+          cd ${{ github.workspace }}/edkrepo
+          wget -O- ${EDKREPO_URL} | tar zxvf -
+          sudo ./install.py --no-prompt --user $(id -nu)
+          # The installer leaves a root-owned file in .edkrepo
+          sudo chown -R $(id -nu). ${HOME}/.edkrepo
+      - name: Configure edkrepo
+        run: |
+          edkrepo manifest-repos add nvidia ${EDKREPO_NVIDIA_MANIFEST_REPO} main nvidia
+          edkrepo manifest
+      - name: Create workspace
+        run: |
+          set -x
+          cd ${{ github.workspace }}
+          # Start with the edkrepo combo that matches this branch
+          edkrepo clone -v workspace NVIDIA-Jetson ${GITHUB_REF_NAME/.*/}
+          cd workspace
+          # Checkout the ref that triggered this build
+          git -C edk2-nvidia fetch --verbose "${{ github.server_url }}/${{ github.repository }}" "${{ github.ref }}"
+          git -C edk2-nvidia checkout FETCH_HEAD
+          # Summarize the workspace, for debug purposes.
+          git -C edk2 describe --always --dirty
+          git -C edk2-platforms describe --always --dirty
+          git -C edk2-nvidia describe --always --dirty
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
@@ -56,7 +95,9 @@ jobs:
     # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
     # If this step fails, then you should remove it and run the build manually (see below)
     - name: Autobuild
-      uses: github/codeql-action/autobuild@v2
+      run: |
+        cd ${{ github.workspace }}/workspace
+        edk2-nvidia/Platform/NVIDIA/Jetson/build.sh
 
     # ℹ️ Command-line programs to run using the OS shell.
     # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
