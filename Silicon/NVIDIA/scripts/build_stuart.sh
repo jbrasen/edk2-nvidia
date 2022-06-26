@@ -32,5 +32,5 @@ STUART_BUILD_OPTIONS=${STUART_BUILD_OPTIONS:---verbose}
 _msg "Building DEBUG (${PLATFORM_BUILD})."
 stuart_build -c ${PLATFORM_BUILD} ${STUART_BUILD_OPTIONS} --target DEBUG
 
-_msg "Building RELEASE (${PLATFORM_BUILD})."
-stuart_build -c ${PLATFORM_BUILD} ${STUART_BUILD_OPTIONS} --target RELEASE
+#_msg "Building RELEASE (${PLATFORM_BUILD})."
+#stuart_build -c ${PLATFORM_BUILD} ${STUART_BUILD_OPTIONS} --target RELEASE
